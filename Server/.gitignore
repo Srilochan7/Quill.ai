@@ -1,0 +1,9 @@
+# Option 1
+venv/
+
+# Option 2
+/venv/
+
+# Option 3
+venv
+
