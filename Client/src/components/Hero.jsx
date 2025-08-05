@@ -1,8 +1,28 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, ArrowUp, FileText, X, Bot, Sun, Moon, Github, Twitter } from 'lucide-react';
 import axios from 'axios';
+
+// --- Helper for CSS styles ---
+const CustomStyles = () => (
+  <style>{`
+    /* Hide the scrollbar */
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+    .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+    /* Classic blinking cursor animation */
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+    .cursor-blink {
+      animation: blink 1.2s step-end infinite;
+    }
+  `}</style>
+);
 
 // --- Animation Variants (Unchanged) ---
 const messageVariants = {
@@ -55,7 +75,9 @@ function ChatPdfApp() {
   const [isLoading, setIsLoading] = useState(false);
   const [chatTitle, setChatTitle] = useState('');
   const [error, setError] = useState('');
-  const [sessionId, setSessionId] = useState(null); // State for the session ID
+  const [sessionId, setSessionId] = useState(null);
+
+  const streamIntervalRef = useRef(null);
 
   const [theme, setTheme] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -67,7 +89,7 @@ function ChatPdfApp() {
   });
   
   const fileInputRef = useRef(null);
-  const chatContainerRef = useRef(null);
+  const scrollAreaRef = useRef(null);
   const textareaRef = useRef(null);
   
   useEffect(() => {
@@ -87,7 +109,9 @@ function ChatPdfApp() {
   }, [theme]);
 
   useEffect(() => {
-    chatContainerRef.current?.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: 'smooth' });
+    if (scrollAreaRef.current) {
+        scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -104,6 +128,9 @@ function ChatPdfApp() {
   // --- Core Functions ---
 
   const handleNewChat = () => {
+    if (streamIntervalRef.current) {
+        clearInterval(streamIntervalRef.current);
+    }
     setMessages([]);
     setChatTitle('');
     setSessionId(null);
@@ -111,8 +138,12 @@ function ChatPdfApp() {
     setInputValue('');
     setError('');
   };
-  
+
   const handleSendMessage = async () => {
+    if (streamIntervalRef.current) {
+        clearInterval(streamIntervalRef.current);
+    }
+
     const isFirstMessage = messages.length === 0;
     const currentQuestion = inputValue.trim();
     const currentFile = uploadedFile;
@@ -160,21 +191,44 @@ function ChatPdfApp() {
             session_id: currentSessionId,
             question: currentQuestion,
         });
+        
+        setIsLoading(false);
 
-        const aiResponse = {
-            id: Date.now() + 1,
-            sender: 'ai',
-            text: chatResponse.data.answer,
-        };
-        setMessages(prev => [...prev, aiResponse]);
+        const fullAnswer = chatResponse.data.answer;
+        const aiMessageId = Date.now() + 1;
+
+        setMessages(prev => [
+            ...prev,
+            { id: aiMessageId, sender: 'ai', text: '' }
+        ]);
+        
+        // --- MODIFICATION: Switched from word-by-word to character-by-character ---
+        const chars = fullAnswer.split('');
+        let currentCharIndex = 0;
+        
+        streamIntervalRef.current = setInterval(() => {
+            if (currentCharIndex < chars.length) {
+                setMessages(prev =>
+                    prev.map(msg =>
+                        msg.id === aiMessageId
+                            ? { ...msg, text: msg.text + chars[currentCharIndex] }
+                            : msg
+                    )
+                );
+                currentCharIndex++;
+            } else {
+                clearInterval(streamIntervalRef.current);
+                streamIntervalRef.current = null;
+            }
+        }, 20); // Interval is faster for smoother character typing
+
     } catch (err) {
         const errorMessage = err.response?.data?.detail || "An error occurred. Please try again.";
         setError(errorMessage);
-        // Revert optimistic UI update on failure
         setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
         if (isFirstMessage) setChatTitle('');
-    } finally {
         setIsLoading(false);
+    } finally {
         if (textareaRef.current) textareaRef.current.style.height = 'auto';
     }
   };
@@ -186,50 +240,64 @@ function ChatPdfApp() {
 
   return (
     <motion.div 
-      className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 flex flex-col p-4 pt-24 transition-colors duration-500"
+      className="h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 flex flex-col transition-colors duration-500"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
     >
+      <CustomStyles />
       <TopNavBar onToggleTheme={toggleTheme} currentTheme={theme} onNewChat={handleNewChat} />
-      <div className="w-full max-w-3xl mx-auto flex-grow flex flex-col">
-        <AnimatePresence>
-          {messages.length > 0 && (
-            <motion.div
-                className="w-full flex-grow flex flex-col min-h-0"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            >
-                <motion.div 
-                    className="mb-4 p-3 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm rounded-lg border border-slate-200 dark:border-slate-700 text-center sticky top-[70px] z-10"
-                    initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-                >
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Chatting with:</p>
-                    <h2 className="font-semibold text-slate-800 dark:text-slate-100 truncate">{chatTitle}</h2>
-                </motion.div>
-                <div ref={chatContainerRef} className="flex-grow w-full space-y-6 overflow-y-auto pr-2 pb-4">
+      
+      <main ref={scrollAreaRef} className="flex-grow w-full max-w-3xl mx-auto overflow-y-auto pt-20 pb-10 min-h-0 no-scrollbar">
+        <div className="px-4">
+            <AnimatePresence>
+              {messages.length > 0 ? (
+                <div className="w-full space-y-6 pb-8">
                     <AnimatePresence mode="popLayout">
-                        {messages.map(msg => (
+                        {messages.map((msg, index) => (
                             <motion.div key={msg.id} variants={messageVariants} initial="hidden" animate="visible" exit="exit" layout>
-                                {msg.sender === 'user' ? <UserMessage message={msg} /> : <AiMessage message={msg} />}
+                                {msg.sender === 'user' ? (
+                                    <UserMessage message={msg} />
+                                 ) : (
+                                    <AiMessage 
+                                        message={msg}
+                                        isStreaming={streamIntervalRef.current !== null && index === messages.length - 1}
+                                    />
+                                 )}
                             </motion.div>
                         ))}
                     </AnimatePresence>
                     {isLoading && <LoadingIndicator />}
                 </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <motion.div
-          className={`w-full max-w-2xl mx-auto flex flex-col ${messages.length > 0 ? 'mt-auto' : 'justify-center flex-grow'}`}
-          layout transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-        >
-          <AnimatePresence mode="wait">
-            {messages.length === 0 && (
-              <motion.div className="text-center" variants={heroContentVariants} initial="hidden" animate="visible" exit="exit">
-                <motion.h1 variants={heroContentVariants} className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-slate-50">Chat With Your PDF</motion.h1>
-                <motion.p variants={heroContentVariants} className="mt-4 text-lg text-slate-600 dark:text-slate-400">Upload a document to get started.</motion.p>
-              </motion.div>
+              ) : (
+                <motion.div 
+                    className="h-full flex flex-col items-center justify-center text-center" 
+                    variants={heroContentVariants} 
+                    initial="hidden" 
+                    animate="visible" 
+                    exit="exit"
+                >
+                  <motion.h1 variants={heroContentVariants} className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-slate-50">Chat With Your PDF</motion.h1>
+                  <motion.p variants={heroContentVariants} className="mt-4 text-lg text-slate-600 dark:text-slate-400">Upload a document to get started.</motion.p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+        </div>
+      </main>
+
+      <div className="w-full fixed bottom-0 left-0 bg-gradient-to-t from-slate-50 dark:from-slate-950 to-transparent z-10">
+        <div className="max-w-3xl mx-auto px-4 pb-4">
+          <AnimatePresence>
+            {chatTitle && !uploadedFile && (
+                <motion.div
+                    className="text-center text-xs text-slate-500 dark:text-slate-400 mb-2"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                >
+                    Chatting with <span className="font-semibold text-slate-600 dark:text-slate-300">{chatTitle}</span>
+                </motion.div>
             )}
           </AnimatePresence>
-          <motion.div className={`w-full relative ${messages.length === 0 ? 'mt-15' : 'mt-2'}`} layoutId="input-container">
+          <motion.div className="w-full relative" layoutId="input-container">
             <AnimatePresence>{error && <motion.p className="absolute bottom-full w-full text-center text-red-500 dark:text-red-400 text-sm mb-2" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }}>{error}</motion.p>}</AnimatePresence>
             <AnimatePresence>
               {uploadedFile && (
@@ -251,17 +319,19 @@ function ChatPdfApp() {
               <textarea
                 ref={textareaRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                placeholder={uploadedFile ? `Ask about ${uploadedFile.name}` : 'Upload a document to start chatting...'}
+                placeholder={chatTitle ? `Ask about ${chatTitle}` : 'Upload a document to start chatting...'}
                 className="w-full bg-transparent text-base placeholder-slate-500 dark:placeholder-slate-400 rounded-xl p-4 pl-14 pr-14 outline-none resize-none max-h-48" rows={1}
               />
-              <button onClick={handleSendMessage} disabled={isLoading} className="absolute top-1/2 -translate-y-1/2 right-3 w-8 h-8 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg flex items-center justify-center disabled:bg-slate-400 dark:disabled:bg-slate-600"><ArrowUp className="w-5 h-5" /></button>
+              <button onClick={handleSendMessage} disabled={isLoading || streamIntervalRef.current !== null} className="absolute top-1/2 -translate-y-1/2 right-3 w-8 h-8 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"><ArrowUp className="w-5 h-5" /></button>
             </div>
           </motion.div>
-        </motion.div>
+        </div>
       </div>
     </motion.div>
   );
 }
+
+// --- Child Components ---
 
 const TopNavBar = ({ onToggleTheme, currentTheme, onNewChat }) => (
   <motion.header className="fixed top-0 left-0 right-0 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 z-20" initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
@@ -292,11 +362,12 @@ const UserMessage = ({ message }) => (
   </div>
 );
 
-const AiMessage = ({ message }) => (
+const AiMessage = ({ message, isStreaming }) => (
   <div className="flex items-start gap-3 mr-10">
     <div className="w-8 h-8 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center flex-shrink-0"><Bot className="w-5 h-5 text-slate-600 dark:text-slate-300" /></div>
     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-lg max-w-xl">
-       <p className="whitespace-pre-wrap">{message.text}</p>
+        {/* MODIFICATION: Using the new 'cursor-blink' class for a better animation */}
+        <p className="whitespace-pre-wrap">{message.text}{isStreaming ? <span className="cursor-blink ml-1">▌</span> : ''}</p>
     </div>
   </div>
 );
