@@ -165,17 +165,15 @@
 #     uvicorn.run(app, host="https://try-quillai.vercel.app/", port=8000)
 
 
-
 import uvicorn
 import uuid
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import traceback
 
-# --- Step 1: Import your REAL functions ---
-# Make sure the file names (e.g., chat_engine, vector_store) are correct.
 from pdf_parser import extract_text
-from vector_store import create_vectorstore, get_vectorstore # Assuming get_vectorstore is needed
+from vector_store import create_vectorstore, get_vectorstore
 from chat_engine import ask_question
 
 app = FastAPI(
@@ -197,11 +195,15 @@ class ChatRequest(BaseModel):
     session_id: str
     question: str
 
+@app.get("/")
+async def root():
+    """Health check endpoint"""
+    return {"message": "ChatWithPDF API is running"}
+
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
     """
-    Uploads a PDF, extracts text using the REAL parser, creates a REAL vector store, 
-    and returns a session ID.
+    Uploads a PDF, extracts text, creates a vector store, and returns a session ID.
     """
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
@@ -210,35 +212,54 @@ async def upload_pdf(file: UploadFile = File(...)):
     
     try:
         file_content = await file.read()
+        print(f"File size: {len(file_content)} bytes")
         
-        # --- Step 2: Use your REAL functions here ---
+        # Extract text from PDF
         text = extract_text(file_content)
+        print(f"Extracted text length: {len(text)} characters")
         
         if not text or not text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from the PDF or the PDF is empty.")
         
+        # Create vector store
         create_vectorstore(session_id, text)
         
-        return {"session_id": session_id, "detail": "File uploaded successfully."}
+        return {
+            "session_id": session_id, 
+            "detail": "File uploaded successfully.",
+            "text_length": len(text)
+        }
         
     except Exception as e:
-        print(f"An error occurred during upload: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred on the server: {e}")
+        print(f"Upload error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
     """
-    Asks a question using the REAL chat engine that calls the Groq LLM.
+    Asks a question based on the session_id of a previously uploaded PDF.
     """
     try:
-        # --- Step 3: Use your REAL ask_question function ---
+        print(f"Chat request - Session: {request.session_id}, Question: {request.question}")
+        
+        # Validate session exists
+        store = get_vectorstore(request.session_id)
+        if not store:
+            raise HTTPException(status_code=404, detail="Session not found. Please upload a PDF first.")
+        
+        # Get answer
         answer = ask_question(request.session_id, request.question)
+        print(f"Generated answer: {answer}")
+        
         return {"answer": answer}
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"An error occurred during chat: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred on the server: {e}")
+        print(f"Chat error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
-# --- Step 4: Correct the host to run the server ---
-# Use "0.0.0.0" to make it accessible on your network or "127.0.0.1" for local access only.
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -58,7 +58,6 @@
 #         return f"Error processing question"
 
 
-
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain_groq import ChatGroq
@@ -71,20 +70,20 @@ load_dotenv()
 # Initialize Groq LLM with Mixtral model
 llm = ChatGroq(
     groq_api_key=os.getenv("GROQ_API_KEY"),
-    model_name="llama3-8b-8192"  # Use this for a fast and effective model
+    # model_name="llama3-8b-8192"
+    model_name="llama3-8b-8192"
 )
 
 # Custom prompt to keep the answers PDF-focused
-# This part remains unchanged
 custom_prompt = PromptTemplate(
     input_variables=["context", "question"],
     template="""
 You are a highly intelligent AI assistant specialized in reading and understanding PDF documents, especially legal, academic, technical, and business documents. Your goal is to provide accurate, helpful, and clear answers to user queries based on the document content only.
 
 Rules:
-- answer in less than 10 words.
+_ Make the reply between 10-20 words
 - Always answer **based only** on the content in the provided document
-- If the information is not available in the document, respond: **"The information is not available in the PDF."**
+- If the information is not available in the document, respond: "The information is not available in the PDF."
 - Maintain the **original tone** of the document if possible.
 - When referencing the PDF, use phrases like "According to the document..." or "As mentioned in the PDF..."
 - If the user asks for a summary, include the key sections, bullet points, and main themes.
@@ -107,20 +106,27 @@ def ask_question(session_id: str, question: str) -> str:
     if not store:
         return "Session not found. Upload a PDF first."
 
-    # This part remains unchanged
     qa = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
-        retriever=store.as_retriever(search_kwargs={"k": 1}),
+        retriever=store.as_retriever(search_kwargs={"k": 3}),  # Get top 3 relevant chunks
         chain_type_kwargs={"prompt": custom_prompt}
     )
 
     try:
-        # qa.run() is deprecated, prefer qa.invoke()
         result = qa.invoke({"query": question})
-        if isinstance(result, dict) and 'result' in result:
-            return result['result'].strip().lstrip('.,:;')
-        return str(result).strip().lstrip('.,:;')
+        
+        # Handle the response properly
+        if isinstance(result, dict):
+            answer = result.get('result', str(result))
+        else:
+            answer = str(result)
+        
+        # Clean the answer properly
+        answer = answer.strip()
+        
+        return answer
 
     except Exception as e:
-        return f"Error processing question: {e}"
+        print(f"Error in ask_question: {e}")
+        return f"Error processing question: {str(e)}"
