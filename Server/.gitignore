@@ -7,3 +7,4 @@ venv/
 # Option 3
 venv
 
+.env
