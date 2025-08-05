@@ -199,7 +199,7 @@ function ChatPdfApp() {
         if (isFirstMessage && currentFile) {
             const formData = new FormData();
             formData.append('file', currentFile);
-            const uploadResponse = await fetch('https://quill-ai-ten.vercel.app/upload', {
+            const uploadResponse = await fetch('http://localhost:8000/upload', {
                 method: 'POST',
                 body: formData,
             });
