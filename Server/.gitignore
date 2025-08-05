@@ -8,3 +8,11 @@ venv/
 venv
 
 .env
+
+
+chroma_db/
+
+/chroma_db
+
+
+chroma_db
