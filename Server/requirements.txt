@@ -1,5 +1,3 @@
-# requirements.txt
-
 fastapi
 uvicorn[standard]
 python-dotenv
@@ -13,6 +11,7 @@ langchain-google-genai
 langchain-huggingface
 langchain-community
 langchain_community
-
+langchain-groq
+langchain_groq
 
 python-multipart

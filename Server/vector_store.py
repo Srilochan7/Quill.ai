@@ -24,6 +24,8 @@ def create_vectorstore(session_id: str, text: str):
     """Creates a new vector store for a session."""
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_text(text)
+    chunks = [chunk for chunk in chunks if chunk and 'undefined' not in chunk.lower()]
+
 
     documents = [Document(page_content=chunk) for chunk in chunks]
 

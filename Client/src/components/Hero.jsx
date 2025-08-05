@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, ArrowUp, FileText, X, Bot, Sun, Moon, Github, Twitter } from 'lucide-react';
 import axios from 'axios';
 
-// --- Helper for CSS styles ---
+// --- Helper for CSS styles (Unchanged) ---
 const CustomStyles = () => (
   <style>{`
     /* Hide the scrollbar */
@@ -76,11 +76,12 @@ function ChatPdfApp() {
   const [chatTitle, setChatTitle] = useState('');
   const [error, setError] = useState('');
   const [sessionId, setSessionId] = useState(null);
-
+  const [isScrolled, setIsScrolled] = useState(false); // --- NEW: State to track scroll position for header animation
+  
   const streamIntervalRef = useRef(null);
-
+  
   const [theme, setTheme] = useState(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== '') {
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme) return savedTheme;
       return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -107,12 +108,16 @@ function ChatPdfApp() {
       metaThemeColor.setAttribute('content', theme === 'dark' ? '#0f172a' : '#f8fafc');
     }
   }, [theme]);
-
+  
+  // --- MODIFICATION: Improved auto-scrolling effect ---
+  // This effect now correctly depends on the text of the last message.
+  // This ensures that as the AI response is streamed and the message bubble grows,
+  // the view continues to scroll down, keeping the latest content visible.
   useEffect(() => {
     if (scrollAreaRef.current) {
         scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, messages[messages.length - 1]?.text]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -125,7 +130,25 @@ function ChatPdfApp() {
     if (uploadedFile) setError('');
   }, [uploadedFile]);
 
-  // --- Core Functions ---
+  // --- NEW: Effect for header scroll animation ---
+  // This effect adds an event listener to the main scrollable area.
+  // It updates the `isScrolled` state based on the scroll position,
+  // which is then passed to the TopNavBar to change its style.
+  useEffect(() => {
+    const scrollableArea = scrollAreaRef.current;
+    if (!scrollableArea) return;
+
+    const handleScroll = () => {
+        setIsScrolled(scrollableArea.scrollTop > 10);
+    };
+
+    scrollableArea.addEventListener('scroll', handleScroll);
+    
+    // Cleanup function to remove the event listener
+    return () => scrollableArea.removeEventListener('scroll', handleScroll);
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+  // --- Core Functions (handleSendMessage unchanged, but included for completeness) ---
 
   const handleNewChat = () => {
     if (streamIntervalRef.current) {
@@ -202,7 +225,6 @@ function ChatPdfApp() {
             { id: aiMessageId, sender: 'ai', text: '' }
         ]);
         
-        // --- MODIFICATION: Switched from word-by-word to character-by-character ---
         const chars = fullAnswer.split('');
         let currentCharIndex = 0;
         
@@ -220,7 +242,7 @@ function ChatPdfApp() {
                 clearInterval(streamIntervalRef.current);
                 streamIntervalRef.current = null;
             }
-        }, 20); // Interval is faster for smoother character typing
+        }, 20);
 
     } catch (err) {
         const errorMessage = err.response?.data?.detail || "An error occurred. Please try again.";
@@ -244,7 +266,8 @@ function ChatPdfApp() {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
     >
       <CustomStyles />
-      <TopNavBar onToggleTheme={toggleTheme} currentTheme={theme} onNewChat={handleNewChat} />
+      {/* --- MODIFICATION: Pass isScrolled prop to the navbar --- */}
+      <TopNavBar onToggleTheme={toggleTheme} currentTheme={theme} onNewChat={handleNewChat} isScrolled={isScrolled} />
       
       <main ref={scrollAreaRef} className="flex-grow w-full max-w-3xl mx-auto overflow-y-auto pt-20 pb-10 min-h-0 no-scrollbar">
         <div className="px-4">
@@ -283,18 +306,19 @@ function ChatPdfApp() {
         </div>
       </main>
 
+      {/* --- Input Area (Unchanged) --- */}
       <div className="w-full fixed bottom-0 left-0 bg-gradient-to-t from-slate-50 dark:from-slate-950 to-transparent z-10">
         <div className="max-w-3xl mx-auto px-4 pb-4">
           <AnimatePresence>
             {chatTitle && !uploadedFile && (
-                <motion.div
-                    className="text-center text-xs text-slate-500 dark:text-slate-400 mb-2"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                >
-                    Chatting with <span className="font-semibold text-slate-600 dark:text-slate-300">{chatTitle}</span>
-                </motion.div>
+              <motion.div
+                className="text-center text-xs text-slate-500 dark:text-slate-400 mb-2"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+              >
+                Chatting with <span className="font-semibold text-slate-600 dark:text-slate-300">{chatTitle}</span>
+              </motion.div>
             )}
           </AnimatePresence>
           <motion.div className="w-full relative" layoutId="input-container">
@@ -305,11 +329,11 @@ function ChatPdfApp() {
                   className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-full max-w-md"
                   initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
                 >
-                    <div className="flex items-center gap-2 bg-indigo-50 text-indigo-800 text-sm font-medium px-3 py-2 rounded-lg border border-indigo-200 dark:bg-indigo-900/50 dark:text-indigo-200 dark:border-indigo-800">
-                        <FileText className="w-4 h-4 flex-shrink-0" />
-                        <span className="truncate">{uploadedFile.name}</span>
-                        <motion.button onClick={removeFile} className="ml-auto text-indigo-500 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-100 p-1 rounded-full" whileHover={{ scale: 1.1, rotate: 90 }}><X className="w-4 h-4" /></motion.button>
-                    </div>
+                  <div className="flex items-center gap-2 bg-indigo-50 text-indigo-800 text-sm font-medium px-3 py-2 rounded-lg border border-indigo-200 dark:bg-indigo-900/50 dark:text-indigo-200 dark:border-indigo-800">
+                    <FileText className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{uploadedFile.name}</span>
+                    <motion.button onClick={removeFile} className="ml-auto text-indigo-500 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-100 p-1 rounded-full" whileHover={{ scale: 1.1, rotate: 90 }}><X className="w-4 h-4" /></motion.button>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -331,10 +355,15 @@ function ChatPdfApp() {
   );
 }
 
-// --- Child Components ---
-
-const TopNavBar = ({ onToggleTheme, currentTheme, onNewChat }) => (
-  <motion.header className="fixed top-0 left-0 right-0 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 z-20" initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+// --- MODIFICATION: Updated TopNavBar to use the isScrolled prop ---
+// The className is now dynamic. When `isScrolled` is true, it applies a blurred
+// background, a border, and a shadow. When false, it's fully transparent.
+const TopNavBar = ({ onToggleTheme, currentTheme, onNewChat, isScrolled }) => (
+  <header className={`fixed top-0 left-0 right-0 z-20 transition-all duration-300 ${
+    isScrolled 
+        ? 'bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 shadow-sm'
+        : 'bg-slate-50 dark:bg-slate-950'
+  }`}>
     <div className="max-w-3xl mx-auto flex justify-between items-center p-3">
         <div className="flex items-center gap-2"><Bot className="w-6 h-6 text-indigo-500" /><span className="font-bold text-lg text-slate-800 dark:text-slate-100">Quill.ai</span></div>
         <div className="flex items-center gap-1 sm:gap-2">
@@ -350,8 +379,10 @@ const TopNavBar = ({ onToggleTheme, currentTheme, onNewChat }) => (
             </button>
         </div>
     </div>
-  </motion.header>
+  </header>
 );
+
+// --- Child Components (Unchanged) ---
 
 const UserMessage = ({ message }) => (
   <div className="flex justify-end ml-10">
@@ -366,8 +397,7 @@ const AiMessage = ({ message, isStreaming }) => (
   <div className="flex items-start gap-3 mr-10">
     <div className="w-8 h-8 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center flex-shrink-0"><Bot className="w-5 h-5 text-slate-600 dark:text-slate-300" /></div>
     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-lg max-w-xl">
-        {/* MODIFICATION: Using the new 'cursor-blink' class for a better animation */}
-        <p className="whitespace-pre-wrap">{message.text}{isStreaming ? <span className="cursor-blink ml-1">▌</span> : ''}</p>
+      <p className="whitespace-pre-wrap">{message.text}{isStreaming ? <span className="cursor-blink ml-1">▌</span> : ''}</p>
     </div>
   </div>
 );
