@@ -1,7 +1,15 @@
+# requirements.txt
+
 fastapi
-uvicorn
-PyPDF2
-langchain
-langchain_google_genai 
-faiss-cpu
+uvicorn[standard]
 python-dotenv
+PyPDF2
+chromadb
+sentence-transformers
+
+# Core LangChain packages
+langchain
+langchain-google-genai
+langchain-huggingface
+langchain-community
+langchain_community

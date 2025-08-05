@@ -7,11 +7,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Initialize Gemini LLM
 llm = ChatGoogleGenerativeAI(
-    model="gemini-pro",
+    model="gemini-1.5-flash",
     google_api_key=os.getenv("GEMINI_API_KEY")
 )
 
+# Custom prompt to keep the answers PDF-focused
 custom_prompt = PromptTemplate(
     input_variables=["context", "question"],
     template="""
@@ -37,6 +39,7 @@ Answer:
 )
 
 def ask_question(session_id: str, question: str) -> str:
+    """Ask a question using a session's vectorstore"""
     store = get_vectorstore(session_id)
     if not store:
         return "Session not found. Upload a PDF first."
@@ -44,8 +47,11 @@ def ask_question(session_id: str, question: str) -> str:
     qa = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
-        retriever=store.as_retriever(),
+        retriever=store.as_retriever(search_kwargs={"k": 4}),  # Return top 4 most relevant chunks
         chain_type_kwargs={"prompt": custom_prompt}
     )
 
-    return qa.run(question)
+    try:
+        return qa.run(question)
+    except Exception as e:
+        return f"Error processing question: {str(e)}"
