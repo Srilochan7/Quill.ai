@@ -1,7 +1,7 @@
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
-from langchain.chat_models import ChatGoogleGenerativeAI
-from vectorstore import get_vectorstore
+from langchain_google_genai import ChatGoogleGenerativeAI
+from vector_store import get_vectorstore
 import os
 from dotenv import load_dotenv
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, ArrowUp, FileText, X, Bot, Github, Twitter, Sun, Moon } from 'lucide-react';
+import axios from 'axios'
 
 // --- Enhanced Animation Variants ---
 const containerVariants = {
