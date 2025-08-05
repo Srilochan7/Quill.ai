@@ -477,7 +477,7 @@ const TopNavBar = ({ onToggleTheme, currentTheme, onNewChat, isScrolled }) => (
           <Github className="w-5 h-5" />
         </a>
         <a 
-          href="https://x.com/Srilochan7" 
+          href="https://x.com" 
           target="_blank" 
           rel="noopener noreferrer" 
           className="p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
